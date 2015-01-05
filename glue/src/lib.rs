@@ -1,5 +1,6 @@
 #![feature(macro_rules)]
 #![feature(phase)]
+#![feature(unboxed_closures)]
 
 #![unstable]
 
@@ -9,9 +10,8 @@ extern crate compile_msg;
 extern crate libc;
 
 use std::c_str::ToCStr;
-use std::sync::mpsc::{Sender};
+use std::comm::{Sender};
 use std::sync::Mutex;
-use std::thread::Thread;
 
 #[doc(hidden)]
 pub mod ffi;
@@ -37,7 +37,7 @@ pub enum Event {
 impl Copy for Event {}
 
 #[cfg(not(target_os = "android"))]
-compile_note!("You are not compiling for Android");
+compile_note!{"You are not compiling for Android"}
 
 #[macro_export]
 macro_rules! android_start(
@@ -61,7 +61,7 @@ macro_rules! android_start(
             }
         }
     )
-);
+)
 
 /// This is the function that must be called by `android_main`
 #[doc(hidden)]
@@ -82,7 +82,7 @@ pub fn android_main2<F>(app: *mut (), main_function: F)
     app.userData = unsafe { std::mem::transmute(&context) };
 
     // executing the main function in parallel
-    let g = Thread::spawn(move|| {
+    spawn(proc() {
         std::io::stdio::set_stdout(box std::io::LineBufferedWriter::new(ToLogWriter));
         std::io::stdio::set_stderr(box std::io::LineBufferedWriter::new(ToLogWriter));
         main_function()
@@ -131,7 +131,7 @@ pub extern fn inputs_callback(_: *mut ffi::android_app, event: *const ffi::AInpu
     -> libc::int32_t
 {
     fn send_event(event: Event) {
-        let senders = get_context().senders.lock().ok().unwrap();
+        let senders = get_context().senders.lock();
         for sender in senders.iter() {
             sender.send(event);
         }
@@ -198,7 +198,7 @@ fn get_context() -> &'static Context {
 
 /// Adds a sender where events will be sent to.
 pub fn add_sender(sender: Sender<Event>) {
-    get_context().senders.lock().ok().unwrap().push(sender);
+    get_context().senders.lock().push(sender);
 }
 
 /// Returns a handle to the native window.
