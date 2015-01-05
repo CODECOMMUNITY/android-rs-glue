@@ -8,7 +8,10 @@ extern crate compile_msg;
 
 extern crate libc;
 
+use std::c_str::ToCStr;
+use std::sync::mpsc::{Sender};
 use std::sync::Mutex;
+use std::thread::Thread;
 
 #[doc(hidden)]
 pub mod ffi;
@@ -31,8 +34,10 @@ pub enum Event {
     EventMove(i32, i32),
 }
 
+impl Copy for Event {}
+
 #[cfg(not(target_os = "android"))]
-compile_note!("You are not compiling for Android")
+compile_note!("You are not compiling for Android");
 
 #[macro_export]
 macro_rules! android_start(
@@ -52,16 +57,17 @@ macro_rules! android_start(
             #[inline(never)]
             #[allow(non_snake_case)]
             pub extern "C" fn android_main(app: *mut ()) {
-                android_glue::android_main2(app, proc() super::$main());
+                android_glue::android_main2(app, move|| super::$main());
             }
         }
     )
-)
+);
 
 /// This is the function that must be called by `android_main`
 #[doc(hidden)]
-pub fn android_main2(app: *mut (), main_function: proc(): Send) {
-    use std::task::TaskBuilder;
+pub fn android_main2<F>(app: *mut (), main_function: F)
+    where F: FnOnce(), F: Send
+{
     use std::{mem, ptr};
 
     write_log("Entering android_main");
@@ -76,7 +82,7 @@ pub fn android_main2(app: *mut (), main_function: proc(): Send) {
     app.userData = unsafe { std::mem::transmute(&context) };
 
     // executing the main function in parallel
-    spawn(proc() {
+    let g = Thread::spawn(move|| {
         std::io::stdio::set_stdout(box std::io::LineBufferedWriter::new(ToLogWriter));
         std::io::stdio::set_stderr(box std::io::LineBufferedWriter::new(ToLogWriter));
         main_function()
@@ -125,7 +131,8 @@ pub extern fn inputs_callback(_: *mut ffi::android_app, event: *const ffi::AInpu
     -> libc::int32_t
 {
     fn send_event(event: Event) {
-        for sender in get_context().senders.lock().iter() {
+        let senders = get_context().senders.lock().ok().unwrap();
+        for sender in senders.iter() {
             sender.send(event);
         }
     }
@@ -191,7 +198,7 @@ fn get_context() -> &'static Context {
 
 /// Adds a sender where events will be sent to.
 pub fn add_sender(sender: Sender<Event>) {
-    get_context().senders.lock().push(sender);
+    get_context().senders.lock().ok().unwrap().push(sender);
 }
 
 /// Returns a handle to the native window.
