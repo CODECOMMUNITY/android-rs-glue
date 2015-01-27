@@ -58,7 +58,7 @@ macro_rules! android_start(
             #[inline(never)]
             #[allow(non_snake_case)]
             pub extern "C" fn android_main(app: *mut ()) {
-                android_glue::android_main2(app, move|| super::$main());
+                android_glue::android_main2(app, move|| ::$main());
             }
         }
     )
