@@ -273,9 +273,40 @@ fn java_src(libs: &HashMap<String, PathBuf>) -> String {
 
     format!(r#"package rust.glutin;
 
+import android.app.NativeActivity;
+import android.content.Intent;
+import android.os.Bundle;
+import android.util.Log;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.PrintStream;
+
 public class MainActivity extends android.app.NativeActivity {{
     static {{
         {0}
+    }}
+    private static final String LOGTAG = "Servo";
+
+    private void set_url(String url) {{
+        try {{
+            PrintStream out = new PrintStream(new FileOutputStream("/sdcard/servo/url.txt"));
+            out.print(url);
+        }} catch (FileNotFoundException e) {{
+        }}
+    }}
+
+    @Override
+    public void onCreate(Bundle savedInstanceState) {{
+        super.onCreate(savedInstanceState);
+
+        final Intent intent = getIntent();
+        if (intent.getAction().equals(Intent.ACTION_VIEW)) {{
+            final String url = intent.getDataString();
+            Log.d(LOGTAG, "Received url "+url);
+            set_url(url);
+        }} else {{
+            set_url("https://en.wikipedia.org/wiki/Rust_%28programming_language%29");
+        }}
     }}
 }}"#, libs_string)
 }
@@ -302,6 +333,28 @@ fn build_manifest(crate_name: &str, activity_name: &str) -> String {
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <!-- Web browser intents -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="http" />
+                <data android:scheme="https" />
+                <data android:scheme="data" />
+                <data android:scheme="javascript" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="file" />
+                <data android:scheme="http" />
+                <data android:scheme="https" />
+                <data android:mimeType="text/html"/>
+                <data android:mimeType="text/plain"/>
+                <data android:mimeType="application/xhtml+xml"/>
             </intent-filter>
         </activity>
     </application>
